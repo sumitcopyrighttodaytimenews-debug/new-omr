@@ -59,77 +59,13 @@ fun ScanOmrScreen(navController: NavController, viewModel: OmrViewModel, examId:
     val numQuestions = 100
     val numOptions = 4
 
-    val options = GmsDocumentScannerOptions.Builder()
-        .setGalleryImportAllowed(true)
-        .setResultFormats(RESULT_FORMAT_JPEG)
-        .setScannerMode(SCANNER_MODE_FULL)
-        .setPageLimit(1)
-        .build()
-
-    val scanner = GmsDocumentScanning.getClient(options)
-
-    val scannerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            val gmsResult = GmsDocumentScanningResult.fromActivityResultIntent(result.data)
-            val uri = gmsResult?.pages?.firstOrNull()?.imageUri
-            if (uri != null) {
-                isProcessing = true
-                coroutineScope.launch {
-                    try {
-                        val bitmap = withContext(Dispatchers.IO) {
-                            MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
-                        }
-                        val softwareBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
-                        
-                        val scanRes = withContext(Dispatchers.Default) {
-                            val scanResultObj = OmrScanner.scan(softwareBitmap, numQuestions, numOptions)
-                            // We return it for now. Evaluation will happen in ResultView or later if we refactor.
-                            scanResultObj
-                        }
-                        if (scanRes != null) {
-                            if (students.any { it.rollNo == scanRes.studentId }) {
-                                scanResult = scanRes
-                            } else {
-                                Toast.makeText(context, "Student Roll No. ${scanRes.studentId} not found.", Toast.LENGTH_LONG).show()
-                            }
-                        } else {
-                            Toast.makeText(context, "Failed to scan OMR.", Toast.LENGTH_SHORT).show()
-                        }
-                    } catch (e: Exception) {
-                        e.printStackTrace()
-                        Toast.makeText(context, "Error processing image", Toast.LENGTH_SHORT).show()
-                    } finally {
-                        isProcessing = false
-                    }
-                }
-            }
-        }
-    }
-
-    val startScan: () -> Unit = {
-        scanner.getStartScanIntent(context as Activity)
-            .addOnSuccessListener { intentSender ->
-                scannerLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
-            }
-            .addOnFailureListener {
-                Toast.makeText(context, "Failed to start scanner", Toast.LENGTH_SHORT).show()
-            }
-    }
-
-    // Auto-start scanner when opening screen
-    LaunchedEffect(Unit) {
-        startScan()
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Scan OMR") },
+                title = { Text("Live Scan") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
                     }
                 }
             )
@@ -147,23 +83,23 @@ fun ScanOmrScreen(navController: NavController, viewModel: OmrViewModel, examId:
                     navController.popBackStack()
                 }, onRescan = {
                     scanResult = null
-                    startScan()
                 })
             } else {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(36.dp), tint = MaterialTheme.colorScheme.primary)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text("Scan a printed OMR sheet", style = MaterialTheme.typography.titleLarge)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Button(onClick = startScan) {
-                        Text("Start Scanner")
+                LiveScannerScreen(
+                    numQuestions = numQuestions,
+                    numOptions = numOptions,
+                    onScanSuccess = { result ->
+                        scanResult = result
+                    },
+                    onCancel = {
+                        navController.popBackStack()
                     }
-                }
+                )
             }
-        }
     }
 }
 
+}
 @Composable
 fun ResultView(result: OmrScanner.ScanResult, exam: Exam, viewModel: OmrViewModel, onDismiss: () -> Unit, onRescan: () -> Unit) {
     var editedStudentId by remember { mutableStateOf(result.studentId) }
