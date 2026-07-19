@@ -21,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -77,8 +78,12 @@ fun LiveCameraPreview(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     
-    var isProcessing by remember { mutableStateOf(false) }
+var isProcessing by remember { mutableStateOf(false) }
     var scanStatus by remember { mutableStateOf("Align sheet and press shutter") }
+    
+    var previewWidth by remember { mutableIntStateOf(1080) }
+    var previewHeight by remember { mutableIntStateOf(1920) }
+    val density = LocalContext.current.resources.displayMetrics.density
     
     val imageCapture = remember { ImageCapture.Builder().setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
 
@@ -137,7 +142,10 @@ fun LiveCameraPreview(
 
                     previewView
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize().onGloballyPositioned {
+                    previewWidth = it.size.width
+                    previewHeight = it.size.height
+                }
             )
 
             // Overlays
@@ -199,8 +207,48 @@ fun LiveCameraPreview(
                                     scope.launch(Dispatchers.Default) {
                                         try {
                                             scanStatus = "Processing Image..."
-                                            // Process Image with new Perspective Transform
-                                            val result = OmrScanner.scanAdvanced(rotatedBitmap, numQuestions, numOptions)
+                                            
+                                            // 1. Calculate the exact crop area based on the blue boxes on screen
+                                            val screenWidth = previewWidth.toFloat()
+                                            val screenHeight = previewHeight.toFloat()
+                                            
+                                            val imgWidth = rotatedBitmap.width.toFloat()
+                                            val imgHeight = rotatedBitmap.height.toFloat()
+                                            
+                                            // PreviewView ScaleType.FILL_CENTER logic
+                                            val scale = Math.max(screenWidth / imgWidth, screenHeight / imgHeight)
+                                            val dispWidth = imgWidth * scale
+                                            val dispHeight = imgHeight * scale
+                                            val leftOffset = (screenWidth - dispWidth) / 2f
+                                            val topOffset = (screenHeight - dispHeight) / 2f
+                                            
+                                            // Margins used for blue boxes (in pixels)
+                                            val marginX = 24f * density
+                                            val marginY = 80f * density
+                                            val bottomMargin = 160f * density
+                                            
+                                            val screenX1 = marginX
+                                            val screenY1 = marginY
+                                            val screenX2 = screenWidth - marginX
+                                            val screenY2 = screenHeight - bottomMargin
+                                            
+                                            // Map screen coordinates back to image coordinates
+                                            val imgX1 = ((screenX1 - leftOffset) / scale).toInt().coerceIn(0, imgWidth.toInt())
+                                            val imgY1 = ((screenY1 - topOffset) / scale).toInt().coerceIn(0, imgHeight.toInt())
+                                            val imgX2 = ((screenX2 - leftOffset) / scale).toInt().coerceIn(0, imgWidth.toInt())
+                                            val imgY2 = ((screenY2 - topOffset) / scale).toInt().coerceIn(0, imgHeight.toInt())
+                                            
+                                            val cropW = (imgX2 - imgX1).coerceAtLeast(1)
+                                            val cropH = (imgY2 - imgY1).coerceAtLeast(1)
+                                            
+                                            // Crop the image to the exact bounding box
+                                            val croppedBitmap = Bitmap.createBitmap(rotatedBitmap, imgX1, imgY1, cropW, cropH)
+                                            
+                                            // Scale to standard A4 size expected by the scanner
+                                            val a4Bitmap = Bitmap.createScaledBitmap(croppedBitmap, 800, 1131, true)
+
+                                            // Process Image directly
+                                            val result = OmrScanner.scan(a4Bitmap, numQuestions, numOptions, "Standard")
                                             
                                             withContext(Dispatchers.Main) {
                                                 if (result.studentId.isNotEmpty() && result.studentId != "?") {
