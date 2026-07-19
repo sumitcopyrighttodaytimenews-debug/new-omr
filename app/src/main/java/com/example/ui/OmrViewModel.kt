@@ -166,9 +166,9 @@ class OmrViewModel(application: Application) : AndroidViewModel(application) {
         return com.example.util.CloudSyncManager.fetchAnswerKey(examId, setName)
     }
 
-    fun createExam(name: String, subject: String, date: String, title: String = "बिहार विद्यालय परीक्षा , समिति", logoUrl: String = "", logoOpacity: Float = 0.2f, logoSize: Float = 100f, logoPosition: String = "Left", marksPerQuestion: Float = 1f, negativeMarks: Float = 0f, passMarks: Float = 30f, bonusMarks: Float = 0f, onDone: (Int) -> Unit) {
+    fun createExam(name: String, subject: String, date: String, title: String = "बिहार विद्यालय परीक्षा , समिति", logoUrl: String = "", logoOpacity: Float = 0.2f, logoSize: Float = 100f, logoPosition: String = "Left", marksPerQuestion: Float = 1f, negativeMarks: Float = 0f, passMarks: Float = 30f, bonusMarks: Float = 0f, templateType: String = "Standard", onDone: (Int) -> Unit) {
         viewModelScope.launch {
-            val examId = com.example.util.CloudSyncManager.uploadExam(Exam(name = name, subject = subject, date = date, title = title, logoUrl = logoUrl, logoOpacity = logoOpacity, logoSize = logoSize, logoPosition = logoPosition, marksPerQuestion = marksPerQuestion, negativeMarks = negativeMarks, passMarks = passMarks, bonusMarks = bonusMarks))
+            val examId = com.example.util.CloudSyncManager.uploadExam(Exam(name = name, subject = subject, date = date, title = title, logoUrl = logoUrl, logoOpacity = logoOpacity, logoSize = logoSize, logoPosition = logoPosition, marksPerQuestion = marksPerQuestion, negativeMarks = negativeMarks, passMarks = passMarks, bonusMarks = bonusMarks, templateType = templateType))
             fetchExams()
             onDone(examId)
         }

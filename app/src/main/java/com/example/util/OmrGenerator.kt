@@ -35,7 +35,7 @@ object OmrGenerator {
         }
     }
 
-    fun drawOmrToCanvas(context: android.content.Context, canvas: Canvas, numQuestions: Int, numOptions: Int, student: Student? = null, title: String = "बिहार विद्यालय परीक्षा , समिति", logoPath: String = "", logoOpacity: Float = 0.2f, logoSize: Float = 100f, logoPosition: String = "Left") {
+    fun drawOmrToCanvas(context: android.content.Context, canvas: Canvas, numQuestions: Int, numOptions: Int, student: Student? = null, title: String = "बिहार विद्यालय परीक्षा , समिति", logoPath: String = "", logoOpacity: Float = 0.2f, logoSize: Float = 100f, logoPosition: String = "Left", templateType: String = "Standard") {
         canvas.drawColor(Color.WHITE)
         
         // Draw Vertical Text on the left
@@ -230,194 +230,228 @@ object OmrGenerator {
         
         // OMR Serial - Removed as per user request
         
-        // Fields (Left Column)
-        val textYStart = 220f
-        val lineSpacing = 40f
         
-        canvas.drawText("1. परीक्षार्थी का नाम:- ${student?.name ?: "<<NAME>>"}", startX, textYStart, leftAlignedSmallText)
-        canvas.drawText("2. रोल नं:- ${student?.rollNo ?: "<<Roll>>"}", startX, textYStart + lineSpacing, leftAlignedSmallText)
-        canvas.drawText("3. विषय कोड:- 320", startX, textYStart + 2 * lineSpacing, leftAlignedSmallText)
-        canvas.drawText("4. विषय:- ${student?.subjects ?: "HISTORY"}", startX, textYStart + 3 * lineSpacing, leftAlignedSmallText)
-
-        // Barcode placeholder (Middle Column)
-        val barcodeY = 110f
-        val barcodeW = 200f
-        val barcodeH = 60f
-        val rollNoText = student?.rollNo ?: "8596312"
-        val barcodeBmp = createBarcodeBitmap(rollNoText, BarcodeFormat.PDF_417, barcodeW.toInt(), barcodeH.toInt())
-        // Draw scan-type corner borders around the 2D barcode area
-        val scanPadding = 5f
-        val bX = col2X - scanPadding
-        val bY = barcodeY - scanPadding
-        val bW = barcodeW + 2 * scanPadding
-        val bH = barcodeH + 2 * scanPadding
-        val cLen = 15f
-        
-        // top left
-        canvas.drawLine(bX, bY, bX + cLen, bY, thinStroke)
-        canvas.drawLine(bX, bY, bX, bY + cLen, thinStroke)
-        // top right
-        canvas.drawLine(bX + bW - cLen, bY, bX + bW, bY, thinStroke)
-        canvas.drawLine(bX + bW, bY, bX + bW, bY + cLen, thinStroke)
-        // bottom left
-        canvas.drawLine(bX, bY + bH, bX + cLen, bY + bH, thinStroke)
-        canvas.drawLine(bX, bY + bH - cLen, bX, bY + bH, thinStroke)
-        // bottom right
-        canvas.drawLine(bX + bW - cLen, bY + bH, bX + bW, bY + bH, thinStroke)
-        canvas.drawLine(bX + bW, bY + bH - cLen, bX + bW, bY + bH, thinStroke)
-        
-        if (barcodeBmp != null) {
-            canvas.drawBitmap(barcodeBmp, col2X, barcodeY, null)
-        } else {
-            // top left
-            canvas.drawLine(col2X, barcodeY, col2X + 15f, barcodeY, thinStroke) 
-            canvas.drawLine(col2X, barcodeY, col2X, barcodeY + 15f, thinStroke) 
-            // top right
-            canvas.drawLine(col2X + barcodeW - 15f, barcodeY, col2X + barcodeW, barcodeY, thinStroke) 
-            canvas.drawLine(col2X + barcodeW, barcodeY, col2X + barcodeW, barcodeY + 15f, thinStroke) 
-            // bottom left
-            canvas.drawLine(col2X, barcodeY + barcodeH, col2X + 15f, barcodeY + barcodeH, thinStroke) 
-            canvas.drawLine(col2X, barcodeY + barcodeH - 15f, col2X, barcodeY + barcodeH, thinStroke) 
-            // bottom right
-            canvas.drawLine(col2X + barcodeW - 15f, barcodeY + barcodeH, col2X + barcodeW, barcodeY + barcodeH, thinStroke) 
-            canvas.drawLine(col2X + barcodeW, barcodeY + barcodeH - 15f, col2X + barcodeW, barcodeY + barcodeH, thinStroke) 
+        if (templateType == "Standard") {
+            // Fields (Left Column)
+                    val textYStart = 220f
+                    val lineSpacing = 40f
+                    
+                    canvas.drawText("1. परीक्षार्थी का नाम:- ${student?.name ?: "<<NAME>>"}", startX, textYStart, leftAlignedSmallText)
+                    canvas.drawText("2. रोल नं:- ${student?.rollNo ?: "<<Roll>>"}", startX, textYStart + lineSpacing, leftAlignedSmallText)
+                    canvas.drawText("3. विषय कोड:- 320", startX, textYStart + 2 * lineSpacing, leftAlignedSmallText)
+                    canvas.drawText("4. विषय:- ${student?.subjects ?: "HISTORY"}", startX, textYStart + 3 * lineSpacing, leftAlignedSmallText)
             
-            canvas.drawText("<<barcode", col2X + barcodeW / 2f, barcodeY + 28f, smallTextPaint)
-            canvas.drawText(">>", col2X + barcodeW / 2f, barcodeY + 52f, smallTextPaint)
-        }
-
-        // Fields (Middle Column)
-        canvas.drawText("5. पंजीयन सं:- ${student?.registrationNo ?: "<<Reg>>"}", col2X, textYStart, leftAlignedSmallText)
-        canvas.drawText("6. पाली:- FIRST", col2X, textYStart + lineSpacing, leftAlignedSmallText)
-        val todayStr = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
-        canvas.drawText("7. परीक्षा की तिथि:- $todayStr", col2X, textYStart + 2 * lineSpacing, leftAlignedSmallText)
-
-        // Photo placeholder (Right Column)
-        val photoX = col3X
-        val photoY = 110f
-        val photoW = 110f
-        val photoH = 140f
-        val photoRect = RectF(photoX, photoY, photoX + photoW, photoY + photoH)
-        canvas.drawRect(photoRect, thinStroke)
-        if (student?.imagePath != null && student.imagePath.isNotEmpty()) {
-            var bmp: Bitmap? = null
-            if (student.imagePath.startsWith("http")) {
-                try {
-                    val url = java.net.URL(student.imagePath)
-                    val connection = url.openConnection() as java.net.HttpURLConnection
-                    connection.doInput = true
-                    connection.connect()
-                    val input = connection.inputStream
-                    bmp = BitmapFactory.decodeStream(input)
-                } catch (e: Exception) {
-                    e.printStackTrace()
+                    // Barcode placeholder (Middle Column)
+                    val barcodeY = 110f
+                    val barcodeW = 200f
+                    val barcodeH = 60f
+                    val rollNoText = student?.rollNo ?: "8596312"
+                    val barcodeBmp = createBarcodeBitmap(rollNoText, BarcodeFormat.PDF_417, barcodeW.toInt(), barcodeH.toInt())
+                    // Draw scan-type corner borders around the 2D barcode area
+                    val scanPadding = 5f
+                    val bX = col2X - scanPadding
+                    val bY = barcodeY - scanPadding
+                    val bW = barcodeW + 2 * scanPadding
+                    val bH = barcodeH + 2 * scanPadding
+                    val cLen = 15f
+                    
+                    // top left
+                    canvas.drawLine(bX, bY, bX + cLen, bY, thinStroke)
+                    canvas.drawLine(bX, bY, bX, bY + cLen, thinStroke)
+                    // top right
+                    canvas.drawLine(bX + bW - cLen, bY, bX + bW, bY, thinStroke)
+                    canvas.drawLine(bX + bW, bY, bX + bW, bY + cLen, thinStroke)
+                    // bottom left
+                    canvas.drawLine(bX, bY + bH, bX + cLen, bY + bH, thinStroke)
+                    canvas.drawLine(bX, bY + bH - cLen, bX, bY + bH, thinStroke)
+                    // bottom right
+                    canvas.drawLine(bX + bW - cLen, bY + bH, bX + bW, bY + bH, thinStroke)
+                    canvas.drawLine(bX + bW, bY + bH - cLen, bX + bW, bY + bH, thinStroke)
+                    
+                    if (barcodeBmp != null) {
+                        canvas.drawBitmap(barcodeBmp, col2X, barcodeY, null)
+                    } else {
+                        // top left
+                        canvas.drawLine(col2X, barcodeY, col2X + 15f, barcodeY, thinStroke) 
+                        canvas.drawLine(col2X, barcodeY, col2X, barcodeY + 15f, thinStroke) 
+                        // top right
+                        canvas.drawLine(col2X + barcodeW - 15f, barcodeY, col2X + barcodeW, barcodeY, thinStroke) 
+                        canvas.drawLine(col2X + barcodeW, barcodeY, col2X + barcodeW, barcodeY + 15f, thinStroke) 
+                        // bottom left
+                        canvas.drawLine(col2X, barcodeY + barcodeH, col2X + 15f, barcodeY + barcodeH, thinStroke) 
+                        canvas.drawLine(col2X, barcodeY + barcodeH - 15f, col2X, barcodeY + barcodeH, thinStroke) 
+                        // bottom right
+                        canvas.drawLine(col2X + barcodeW - 15f, barcodeY + barcodeH, col2X + barcodeW, barcodeY + barcodeH, thinStroke) 
+                        canvas.drawLine(col2X + barcodeW, barcodeY + barcodeH - 15f, col2X + barcodeW, barcodeY + barcodeH, thinStroke) 
+                        
+                        canvas.drawText("<<barcode", col2X + barcodeW / 2f, barcodeY + 28f, smallTextPaint)
+                        canvas.drawText(">>", col2X + barcodeW / 2f, barcodeY + 52f, smallTextPaint)
+                    }
+            
+                    // Fields (Middle Column)
+                    canvas.drawText("5. पंजीयन सं:- ${student?.registrationNo ?: "<<Reg>>"}", col2X, textYStart, leftAlignedSmallText)
+                    canvas.drawText("6. पाली:- FIRST", col2X, textYStart + lineSpacing, leftAlignedSmallText)
+                    val todayStr = java.text.SimpleDateFormat("dd/MM/yyyy", java.util.Locale.getDefault()).format(java.util.Date())
+                    canvas.drawText("7. परीक्षा की तिथि:- $todayStr", col2X, textYStart + 2 * lineSpacing, leftAlignedSmallText)
+            
+                    // Photo placeholder (Right Column)
+                    val photoX = col3X
+                    val photoY = 110f
+                    val photoW = 110f
+                    val photoH = 140f
+                    val photoRect = RectF(photoX, photoY, photoX + photoW, photoY + photoH)
+                    canvas.drawRect(photoRect, thinStroke)
+                    if (student?.imagePath != null && student.imagePath.isNotEmpty()) {
+                        var bmp: Bitmap? = null
+                        if (student.imagePath.startsWith("http")) {
+                            try {
+                                val url = java.net.URL(student.imagePath)
+                                val connection = url.openConnection() as java.net.HttpURLConnection
+                                connection.doInput = true
+                                connection.connect()
+                                val input = connection.inputStream
+                                bmp = BitmapFactory.decodeStream(input)
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        } else {
+                            bmp = BitmapFactory.decodeFile(student.imagePath)
+                        }
+                        if (bmp != null) {
+                            canvas.drawBitmap(bmp, null, photoRect, null)
+                        } else {
+                            canvas.drawText("<<photo>>", photoRect.centerX(), photoRect.centerY(), smallTextPaint)
+                        }
+                    } else {
+                        canvas.drawText("<<photo>>", photoRect.centerX(), photoRect.centerY(), smallTextPaint)
+                    }
+            
+                    val vBarW = 50f
+                    val vBarH = 140f
+                    
+                    val sideBarcodeW = 120
+                    val sideBarcodeH = 30
+                    val sideBarcodeBmp = createBarcodeBitmap(rollNoText, BarcodeFormat.CODE_128, sideBarcodeW, sideBarcodeH)
+            
+                    // Vertical Barcodes Left of Photo
+                    val leftVBarcodeX = photoX - 70f
+                    // top left
+                    canvas.drawLine(leftVBarcodeX, photoY, leftVBarcodeX + 15f, photoY, thinStroke) 
+                    canvas.drawLine(leftVBarcodeX, photoY, leftVBarcodeX, photoY + 15f, thinStroke) 
+                    // top right
+                    canvas.drawLine(leftVBarcodeX + vBarW - 15f, photoY, leftVBarcodeX + vBarW, photoY, thinStroke) 
+                    canvas.drawLine(leftVBarcodeX + vBarW, photoY, leftVBarcodeX + vBarW, photoY + 15f, thinStroke) 
+                    // bottom left
+                    canvas.drawLine(leftVBarcodeX, photoY + vBarH, leftVBarcodeX + 15f, photoY + vBarH, thinStroke) 
+                    canvas.drawLine(leftVBarcodeX, photoY + vBarH - 15f, leftVBarcodeX, photoY + vBarH, thinStroke) 
+                    // bottom right
+                    canvas.drawLine(leftVBarcodeX + vBarW - 15f, photoY + vBarH, leftVBarcodeX + vBarW, photoY + vBarH, thinStroke) 
+                    canvas.drawLine(leftVBarcodeX + vBarW, photoY + vBarH - 15f, leftVBarcodeX + vBarW, photoY + vBarH, thinStroke) 
+                    
+                    if (sideBarcodeBmp != null) {
+                        canvas.save()
+                        canvas.translate(leftVBarcodeX + 10f, photoY + (vBarH / 2f) + (sideBarcodeW / 2f))
+                        canvas.rotate(-90f)
+                        canvas.drawBitmap(sideBarcodeBmp, 0f, 0f, null)
+                        canvas.restore()
+                    } else {
+                        canvas.save()
+                        canvas.translate(leftVBarcodeX + 15f, photoY + vBarH / 2f)
+                        canvas.rotate(90f)
+                        canvas.drawText("O V V", 0f, 0f, smallTextPaint)
+                        canvas.restore()
+                
+                        canvas.save()
+                        canvas.translate(leftVBarcodeX + 35f, photoY + vBarH / 2f)
+                        canvas.rotate(90f)
+                        canvas.drawText("^ < barcode", 0f, 0f, smallTextPaint)
+                        canvas.restore()
+                    }
+            
+                    // Vertical Barcodes Right of Photo
+                    val rightVBarcodeX = photoX + photoW + 20f
+                    // top left
+                    canvas.drawLine(rightVBarcodeX, photoY, rightVBarcodeX + 15f, photoY, thinStroke) 
+                    canvas.drawLine(rightVBarcodeX, photoY, rightVBarcodeX, photoY + 15f, thinStroke) 
+                    // top right
+                    canvas.drawLine(rightVBarcodeX + vBarW - 15f, photoY, rightVBarcodeX + vBarW, photoY, thinStroke) 
+                    canvas.drawLine(rightVBarcodeX + vBarW, photoY, rightVBarcodeX + vBarW, photoY + 15f, thinStroke) 
+                    // bottom left
+                    canvas.drawLine(rightVBarcodeX, photoY + vBarH, rightVBarcodeX + 15f, photoY + vBarH, thinStroke) 
+                    canvas.drawLine(rightVBarcodeX, photoY + vBarH - 15f, rightVBarcodeX, photoY + vBarH, thinStroke) 
+                    // bottom right
+                    canvas.drawLine(rightVBarcodeX + vBarW - 15f, photoY + vBarH, rightVBarcodeX + vBarW, photoY + vBarH, thinStroke) 
+                    canvas.drawLine(rightVBarcodeX + vBarW, photoY + vBarH - 15f, rightVBarcodeX + vBarW, photoY + vBarH, thinStroke) 
+                    
+                    if (sideBarcodeBmp != null) {
+                        canvas.save()
+                        canvas.translate(rightVBarcodeX + 10f, photoY + (vBarH / 2f) + (sideBarcodeW / 2f))
+                        canvas.rotate(-90f)
+                        canvas.drawBitmap(sideBarcodeBmp, 0f, 0f, null)
+                        canvas.restore()
+                    } else {
+                        canvas.save()
+                        canvas.translate(rightVBarcodeX + 15f, photoY + vBarH / 2f)
+                        canvas.rotate(90f)
+                        canvas.drawText("O V V", 0f, 0f, smallTextPaint)
+                        canvas.restore()
+                
+                        canvas.save()
+                        canvas.translate(rightVBarcodeX + 35f, photoY + vBarH / 2f)
+                        canvas.rotate(90f)
+                        canvas.drawText("^ < barcode", 0f, 0f, smallTextPaint)
+                        canvas.restore()
+                    }
+            
+                    // QR Box
+                    val qrBoxY = photoY + photoH + 20f
+                    val qrBoxX = photoX + photoW / 2f
+                    val qrSize = 90f
+                    val qrBmp = createBarcodeBitmap(rollNoText, BarcodeFormat.QR_CODE, qrSize.toInt(), qrSize.toInt())
+                    
+                    if (qrBmp != null) {
+                        canvas.drawBitmap(qrBmp, qrBoxX - qrSize / 2f, qrBoxY, null)
+                    } else {
+                        canvas.drawText("<<", qrBoxX, qrBoxY, smallTextPaint)
+                        canvas.drawRect(qrBoxX - 25f, qrBoxY + 10f, qrBoxX + 25f, qrBoxY + 60f, thinStroke)
+                        canvas.drawText("Q", qrBoxX, qrBoxY + 30f, smallTextPaint)
+                        canvas.drawText("R", qrBoxX, qrBoxY + 50f, smallTextPaint)
+                        canvas.drawText(">>", qrBoxX, qrBoxY + 75f, smallTextPaint)
+                    }
+            
+                    
+        } else {
+            // Draw Roll No Bubbles (7 columns, 10 rows 0-9)
+            val rStartX = 150f
+            val rStartY = 120f
+            val rSpacingX = 42f
+            val rSpacingY = 28f
+            val rBubbleRadius = 11f
+            
+            canvas.drawText("ROLL NUMBER", rStartX + 3 * rSpacingX, rStartY - 25f, titlePaint.apply { textSize = 20f; textAlign = Paint.Align.CENTER })
+            
+            for (col in 0 until 7) {
+                // Draw Box for digit
+                val cx = rStartX + col * rSpacingX
+                canvas.drawRect(cx - 18f, rStartY - 18f, cx + 18f, rStartY + 2f, thinStroke)
+                
+                for (row in 0..9) {
+                    val cy = rStartY + 28f + row * rSpacingY
+                    canvas.drawCircle(cx, cy, rBubbleRadius, thinStroke)
+                    canvas.drawText(row.toString(), cx, cy + 4f, smallTextPaint)
                 }
-            } else {
-                bmp = BitmapFactory.decodeFile(student.imagePath)
             }
-            if (bmp != null) {
-                canvas.drawBitmap(bmp, null, photoRect, null)
-            } else {
-                canvas.drawText("<<photo>>", photoRect.centerX(), photoRect.centerY(), smallTextPaint)
-            }
-        } else {
-            canvas.drawText("<<photo>>", photoRect.centerX(), photoRect.centerY(), smallTextPaint)
+            
+            // Signature box on the right
+            val sigX = 650f
+            val sigY = 220f
+            val sigW = 250f
+            val sigH = 80f
+            canvas.drawRect(sigX, sigY, sigX + sigW, sigY + sigH, thinStroke)
+            canvas.drawText("परीक्षार्थी का पूरा हस्ताक्षर", sigX + sigW / 2f, sigY + sigH + 25f, titlePaint.apply { textSize = 16f; textAlign = Paint.Align.CENTER })
+            canvas.drawText("(Full Signature of Candidate)", sigX + sigW / 2f, sigY + sigH + 45f, smallTextPaint.apply { textAlign = Paint.Align.CENTER })
         }
-
-        val vBarW = 50f
-        val vBarH = 140f
-        
-        val sideBarcodeW = 120
-        val sideBarcodeH = 30
-        val sideBarcodeBmp = createBarcodeBitmap(rollNoText, BarcodeFormat.CODE_128, sideBarcodeW, sideBarcodeH)
-
-        // Vertical Barcodes Left of Photo
-        val leftVBarcodeX = photoX - 70f
-        // top left
-        canvas.drawLine(leftVBarcodeX, photoY, leftVBarcodeX + 15f, photoY, thinStroke) 
-        canvas.drawLine(leftVBarcodeX, photoY, leftVBarcodeX, photoY + 15f, thinStroke) 
-        // top right
-        canvas.drawLine(leftVBarcodeX + vBarW - 15f, photoY, leftVBarcodeX + vBarW, photoY, thinStroke) 
-        canvas.drawLine(leftVBarcodeX + vBarW, photoY, leftVBarcodeX + vBarW, photoY + 15f, thinStroke) 
-        // bottom left
-        canvas.drawLine(leftVBarcodeX, photoY + vBarH, leftVBarcodeX + 15f, photoY + vBarH, thinStroke) 
-        canvas.drawLine(leftVBarcodeX, photoY + vBarH - 15f, leftVBarcodeX, photoY + vBarH, thinStroke) 
-        // bottom right
-        canvas.drawLine(leftVBarcodeX + vBarW - 15f, photoY + vBarH, leftVBarcodeX + vBarW, photoY + vBarH, thinStroke) 
-        canvas.drawLine(leftVBarcodeX + vBarW, photoY + vBarH - 15f, leftVBarcodeX + vBarW, photoY + vBarH, thinStroke) 
-        
-        if (sideBarcodeBmp != null) {
-            canvas.save()
-            canvas.translate(leftVBarcodeX + 10f, photoY + (vBarH / 2f) + (sideBarcodeW / 2f))
-            canvas.rotate(-90f)
-            canvas.drawBitmap(sideBarcodeBmp, 0f, 0f, null)
-            canvas.restore()
-        } else {
-            canvas.save()
-            canvas.translate(leftVBarcodeX + 15f, photoY + vBarH / 2f)
-            canvas.rotate(90f)
-            canvas.drawText("O V V", 0f, 0f, smallTextPaint)
-            canvas.restore()
-    
-            canvas.save()
-            canvas.translate(leftVBarcodeX + 35f, photoY + vBarH / 2f)
-            canvas.rotate(90f)
-            canvas.drawText("^ < barcode", 0f, 0f, smallTextPaint)
-            canvas.restore()
-        }
-
-        // Vertical Barcodes Right of Photo
-        val rightVBarcodeX = photoX + photoW + 20f
-        // top left
-        canvas.drawLine(rightVBarcodeX, photoY, rightVBarcodeX + 15f, photoY, thinStroke) 
-        canvas.drawLine(rightVBarcodeX, photoY, rightVBarcodeX, photoY + 15f, thinStroke) 
-        // top right
-        canvas.drawLine(rightVBarcodeX + vBarW - 15f, photoY, rightVBarcodeX + vBarW, photoY, thinStroke) 
-        canvas.drawLine(rightVBarcodeX + vBarW, photoY, rightVBarcodeX + vBarW, photoY + 15f, thinStroke) 
-        // bottom left
-        canvas.drawLine(rightVBarcodeX, photoY + vBarH, rightVBarcodeX + 15f, photoY + vBarH, thinStroke) 
-        canvas.drawLine(rightVBarcodeX, photoY + vBarH - 15f, rightVBarcodeX, photoY + vBarH, thinStroke) 
-        // bottom right
-        canvas.drawLine(rightVBarcodeX + vBarW - 15f, photoY + vBarH, rightVBarcodeX + vBarW, photoY + vBarH, thinStroke) 
-        canvas.drawLine(rightVBarcodeX + vBarW, photoY + vBarH - 15f, rightVBarcodeX + vBarW, photoY + vBarH, thinStroke) 
-        
-        if (sideBarcodeBmp != null) {
-            canvas.save()
-            canvas.translate(rightVBarcodeX + 10f, photoY + (vBarH / 2f) + (sideBarcodeW / 2f))
-            canvas.rotate(-90f)
-            canvas.drawBitmap(sideBarcodeBmp, 0f, 0f, null)
-            canvas.restore()
-        } else {
-            canvas.save()
-            canvas.translate(rightVBarcodeX + 15f, photoY + vBarH / 2f)
-            canvas.rotate(90f)
-            canvas.drawText("O V V", 0f, 0f, smallTextPaint)
-            canvas.restore()
-    
-            canvas.save()
-            canvas.translate(rightVBarcodeX + 35f, photoY + vBarH / 2f)
-            canvas.rotate(90f)
-            canvas.drawText("^ < barcode", 0f, 0f, smallTextPaint)
-            canvas.restore()
-        }
-
-        // QR Box
-        val qrBoxY = photoY + photoH + 20f
-        val qrBoxX = photoX + photoW / 2f
-        val qrSize = 90f
-        val qrBmp = createBarcodeBitmap(rollNoText, BarcodeFormat.QR_CODE, qrSize.toInt(), qrSize.toInt())
-        
-        if (qrBmp != null) {
-            canvas.drawBitmap(qrBmp, qrBoxX - qrSize / 2f, qrBoxY, null)
-        } else {
-            canvas.drawText("<<", qrBoxX, qrBoxY, smallTextPaint)
-            canvas.drawRect(qrBoxX - 25f, qrBoxY + 10f, qrBoxX + 25f, qrBoxY + 60f, thinStroke)
-            canvas.drawText("Q", qrBoxX, qrBoxY + 30f, smallTextPaint)
-            canvas.drawText("R", qrBoxX, qrBoxY + 50f, smallTextPaint)
-            canvas.drawText(">>", qrBoxX, qrBoxY + 75f, smallTextPaint)
-        }
-
-        // Set Code Instructions
+    // Set Code Instructions
         val instrPaint = Paint().apply {
             isAntiAlias = true
             color = Color.BLACK
@@ -539,10 +573,10 @@ object OmrGenerator {
 
     }
 
-    fun generateOmrBitmap(context: android.content.Context, numQuestions: Int, numOptions: Int, student: Student? = null, title: String = "बिहार विद्यालय परीक्षा , समिति", logoPath: String = "", logoOpacity: Float = 0.2f, logoSize: Float = 100f, logoPosition: String = "Left"): Bitmap {
+    fun generateOmrBitmap(context: android.content.Context, numQuestions: Int, numOptions: Int, student: Student? = null, title: String = "बिहार विद्यालय परीक्षा , समिति", logoPath: String = "", logoOpacity: Float = 0.2f, logoSize: Float = 100f, logoPosition: String = "Left", templateType: String = "Standard"): Bitmap {
         val bitmap = Bitmap.createBitmap(SHEET_WIDTH, SHEET_HEIGHT, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        drawOmrToCanvas(context, canvas, numQuestions, numOptions, student, title, logoPath, logoOpacity, logoSize, logoPosition)
+        drawOmrToCanvas(context, canvas, numQuestions, numOptions, student, title, logoPath, logoOpacity, logoSize, logoPosition, templateType)
         return bitmap
     }
 }

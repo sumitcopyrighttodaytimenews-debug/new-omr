@@ -9,7 +9,7 @@ object OmrScanner {
 
     data class ScanResult(val studentId: String, val paperSet: String, val answers: List<Int>, val annotatedBitmap: Bitmap, val optionCoords: List<List<Pair<Float, Float>>> = emptyList())
 
-    fun scan(bitmap: Bitmap, numQuestions: Int, numOptions: Int): ScanResult {
+    fun scan(bitmap: Bitmap, numQuestions: Int, numOptions: Int, templateType: String = "Standard"): ScanResult {
                 val width = bitmap.width
         val height = bitmap.height
         val annotatedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
@@ -94,8 +94,11 @@ object OmrScanner {
             "?"
         }
 
-        // Read Student ID using ZXing
+        
         var studentId = "?"
+        if (templateType == "Standard") {
+            // Read Student ID using ZXing
+        
         try {
             val width = bitmap.width
             val height = bitmap.height
@@ -133,6 +136,49 @@ object OmrScanner {
                 e2.printStackTrace()
             }
         }
+        } else {
+            // Read Roll No Bubbles
+            val rStartX = 150f
+            val rStartY = 120f
+            val rSpacingX = 42f
+            val rSpacingY = 28f
+            
+            var rollNoStr = ""
+            for (col in 0 until 7) {
+                var bestDigit = -1
+                var maxDarkness = 0f
+                var secondMaxDarkness = 0f
+                
+                for (row in 0..9) {
+                    val cx = rStartX + col * rSpacingX
+                    val cy = rStartY + 28f + row * rSpacingY
+                    val actual = mapVirtualToActual(cx, cy)
+                    val darkness = sampleDarkness(bitmap, matrix, cx, cy, actual.first, actual.second, 8f)
+                    
+                    canvas.drawCircle(actual.first, actual.second, 10f, paintBlue)
+                    
+                    if (darkness > maxDarkness) {
+                        secondMaxDarkness = maxDarkness
+                        maxDarkness = darkness
+                        bestDigit = row
+                    } else if (darkness > secondMaxDarkness) {
+                        secondMaxDarkness = darkness
+                    }
+                }
+                
+                if (maxDarkness > 0.25f && (maxDarkness - secondMaxDarkness) > 0.10f && bestDigit != -1) {
+                    rollNoStr += bestDigit.toString()
+                    val cx = rStartX + col * rSpacingX
+                    val cy = rStartY + 28f + bestDigit * rSpacingY
+                    val actual = mapVirtualToActual(cx, cy)
+                    canvas.drawCircle(actual.first, actual.second, 12f, paintRed)
+                } else {
+                    rollNoStr += "?"
+                }
+            }
+            studentId = rollNoStr
+        }
+    
 
         // Read Answers
         val ansBaseX = 316f

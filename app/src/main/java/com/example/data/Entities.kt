@@ -21,6 +21,7 @@ data class Exam(
     val negativeMarks: Float = 0f,
     val passMarks: Float = 30f,
     val bonusMarks: Float = 0f,
+    val templateType: String = "Standard",
     val timestamp: Long = System.currentTimeMillis()
 )
 

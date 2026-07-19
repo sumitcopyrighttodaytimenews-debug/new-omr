@@ -12,6 +12,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -170,41 +173,59 @@ fun LiveCameraPreview(
             val left = (canvasWidth - frameWidth) / 2f
             val top = (canvasHeight - frameHeight) / 2f
             
-            // Draw dark background outside frame
+            val boxSize = 80.dp.toPx()
+            val strokeWidth = 4.dp.toPx()
+            val blueColor = Color.Blue
+            
+            // Top Left Box
             drawRect(
-                color = Color.Black.copy(alpha = 0.5f),
-                topLeft = Offset(0f, 0f),
-                size = Size(canvasWidth, top)
-            )
-            drawRect(
-                color = Color.Black.copy(alpha = 0.5f),
-                topLeft = Offset(0f, top + frameHeight),
-                size = Size(canvasWidth, canvasHeight - (top + frameHeight))
-            )
-            drawRect(
-                color = Color.Black.copy(alpha = 0.5f),
-                topLeft = Offset(0f, top),
-                size = Size(left, frameHeight)
-            )
-            drawRect(
-                color = Color.Black.copy(alpha = 0.5f),
-                topLeft = Offset(left + frameWidth, top),
-                size = Size(canvasWidth - (left + frameWidth), frameHeight)
-            )
-
-            // Draw frame border
-            drawRect(
-                color = Color.Green,
+                color = blueColor,
                 topLeft = Offset(left, top),
-                size = Size(frameWidth, frameHeight),
-                style = Stroke(width = 4.dp.toPx())
+                size = Size(boxSize, boxSize),
+                style = Stroke(width = strokeWidth)
+            )
+            
+            // Top Right Box
+            drawRect(
+                color = blueColor,
+                topLeft = Offset(left + frameWidth - boxSize, top),
+                size = Size(boxSize, boxSize),
+                style = Stroke(width = strokeWidth)
+            )
+            
+            // Bottom Left Box
+            drawRect(
+                color = blueColor,
+                topLeft = Offset(left, top + frameHeight - boxSize),
+                size = Size(boxSize, boxSize),
+                style = Stroke(width = strokeWidth)
+            )
+            
+            // Bottom Right Box
+            drawRect(
+                color = blueColor,
+                topLeft = Offset(left + frameWidth - boxSize, top + frameHeight - boxSize),
+                size = Size(boxSize, boxSize),
+                style = Stroke(width = strokeWidth)
             )
         }
 
-        Column(
+        Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(bottom = 32.dp),
+                .padding(bottom = 64.dp)
+                .size(72.dp)
+                .background(Color.White, shape = CircleShape)
+                .clickable { /* Shutter button action to be implemented later */ },
+            contentAlignment = Alignment.Center
+        ) {
+            // White circle button
+        }
+        
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(

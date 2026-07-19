@@ -47,6 +47,8 @@ fun CreateExamScreen(navController: NavController, viewModel: OmrViewModel) {
     var negativeMarks by remember { mutableStateOf("0.0") }
     var passMarks by remember { mutableStateOf("30.0") }
     var bonusMarks by remember { mutableStateOf("0.0") }
+    var templateType by remember { mutableStateOf("Standard") }
+    var templateDropdownExpanded by remember { mutableStateOf(false) }
     
     var previewVisible by remember { mutableStateOf(false) }
     
@@ -99,9 +101,9 @@ fun CreateExamScreen(navController: NavController, viewModel: OmrViewModel) {
                     val context = androidx.compose.ui.platform.LocalContext.current
                     var previewBmp by remember { mutableStateOf<Bitmap?>(null) }
                     
-                    LaunchedEffect(examTitle, logoPath, logoOpacity, logoSize, logoPosition) {
+                    LaunchedEffect(examTitle, logoPath, logoOpacity, logoSize, logoPosition, templateType) {
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            val bmp = OmrGenerator.generateOmrBitmap(context, 100, 4, null, examTitle, logoPath, logoOpacity, logoSize, logoPosition)
+                            val bmp = OmrGenerator.generateOmrBitmap(context, 100, 4, null, examTitle, logoPath, logoOpacity, logoSize, logoPosition, templateType)
                             previewBmp = bmp
                         }
                     }
@@ -304,8 +306,42 @@ fun CreateExamScreen(navController: NavController, viewModel: OmrViewModel) {
                 Text("Preview OMR")
             }
 
+            ExposedDropdownMenuBox(
+                expanded = templateDropdownExpanded,
+                onExpandedChange = { templateDropdownExpanded = !templateDropdownExpanded }
+            ) {
+                OutlinedTextField(
+                    value = if (templateType == "Standard") "Standard (All Details + QR)" else "Simple (Roll No Only)",
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("OMR Template") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateDropdownExpanded) },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    modifier = Modifier.fillMaxWidth().menuAnchor()
+                )
+                ExposedDropdownMenu(
+                    expanded = templateDropdownExpanded,
+                    onDismissRequest = { templateDropdownExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Standard (All Details + QR)") },
+                        onClick = {
+                            templateType = "Standard"
+                            templateDropdownExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Simple (Roll No Only)") },
+                        onClick = {
+                            templateType = "RollNoOnly"
+                            templateDropdownExpanded = false
+                        }
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(16.dp))
             Button(
-                onClick = {
+            onClick = {
                     val mk = marksPerQuestion.toFloatOrNull() ?: 1f
                     val neg = negativeMarks.toFloatOrNull() ?: 0f
                     val ps = passMarks.toFloatOrNull() ?: 30f
@@ -314,7 +350,7 @@ fun CreateExamScreen(navController: NavController, viewModel: OmrViewModel) {
                     viewModel.createExam(
                         examName, selectedSubject, examDate, examTitle, 
                         logoPath, logoOpacity, logoSize, logoPosition,
-                        mk, neg, ps, bns
+                        mk, neg, ps, bns, templateType
                     ) { examId ->
                         navController.popBackStack()
                         navController.navigate(Screen.ExamDashboard.createRoute(examId))

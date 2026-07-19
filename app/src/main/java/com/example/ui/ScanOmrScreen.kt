@@ -105,7 +105,7 @@ fun ScanOmrScreen(navController: NavController, viewModel: OmrViewModel, examId:
                                 val stream = context.contentResolver.openInputStream(uri)
                                 val bitmap = BitmapFactory.decodeStream(stream)
                                 if (bitmap != null) {
-                                    val res = OmrScanner.scan(bitmap, numQuestions, numOptions)
+                                    val res = OmrScanner.scan(bitmap, numQuestions, numOptions, exam?.templateType ?: "Standard")
                                     withContext(Dispatchers.Main) {
                                         scanResult = res
                                         isProcessing = false
