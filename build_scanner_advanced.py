@@ -1,4 +1,7 @@
-package com.example.ui
+import os
+
+# 1. Update LiveScanner.kt
+live_scanner_content = """package com.example.ui
 
 import android.Manifest
 import android.graphics.Bitmap
@@ -250,3 +253,115 @@ fun LiveCameraPreview(
         }
     }
 }
+"""
+with open("app/src/main/java/com/example/ui/LiveScanner.kt", "w") as f:
+    f.write(live_scanner_content)
+
+# 2. Update OmrGenerator.kt to add corner markers
+with open("app/src/main/java/com/example/util/OmrGenerator.kt", "r") as f:
+    gen = f.read()
+
+marker_code = """
+            // DRAW 4 CORNER MARKERS FOR SCANNER ALIGNMENT
+            val markerSize = 40f
+            val markerPaint = Paint().apply {
+                color = android.graphics.Color.BLACK
+                style = Paint.Style.FILL
+            }
+            canvas.drawRect(0f, 0f, markerSize, markerSize, markerPaint) // TL
+            canvas.drawRect(canvasWidth - markerSize, 0f, canvasWidth, markerSize, markerPaint) // TR
+            canvas.drawRect(0f, canvasHeight - markerSize, markerSize, canvasHeight, markerPaint) // BL
+            canvas.drawRect(canvasWidth - markerSize, canvasHeight - markerSize, canvasWidth, canvasHeight, markerPaint) // BR
+"""
+
+if "DRAW 4 CORNER MARKERS" not in gen:
+    gen = gen.replace("canvas.drawColor(android.graphics.Color.WHITE)", "canvas.drawColor(android.graphics.Color.WHITE)\n" + marker_code)
+    with open("app/src/main/java/com/example/util/OmrGenerator.kt", "w") as f:
+        f.write(gen)
+
+# 3. Update OmrScanner.kt with scanAdvanced function
+with open("app/src/main/java/com/example/util/OmrScanner.kt", "r") as f:
+    scan_code = f.read()
+
+advanced_scan_code = """
+    companion object {
+        fun scanAdvanced(bitmap: android.graphics.Bitmap, numQuestions: Int, numOptions: Int): ScanResult {
+            val w = bitmap.width.toFloat()
+            val h = bitmap.height.toFloat()
+            
+            // Search regions based on where the blue boxes are in the UI
+            val searchW = (w * 0.25f).toInt()
+            val searchH = (h * 0.20f).toInt()
+            
+            val tl = findMarkerCenter(bitmap, 0, 0, searchW, searchH)
+            val tr = findMarkerCenter(bitmap, (w - searchW).toInt(), 0, searchW, searchH)
+            val bl = findMarkerCenter(bitmap, 0, (h - searchH).toInt(), searchW, searchH)
+            val br = findMarkerCenter(bitmap, (w - searchW).toInt(), (h - searchH).toInt(), searchW, searchH)
+            
+            val a4W = 800f
+            val a4H = 1131f
+            
+            val src = floatArrayOf(
+                tl.x, tl.y,
+                tr.x, tr.y,
+                br.x, br.y,
+                bl.x, bl.y
+            )
+            val dst = floatArrayOf(
+                0f, 0f,
+                a4W, 0f,
+                a4W, a4H,
+                0f, a4H
+            )
+            
+            val matrix = android.graphics.Matrix()
+            matrix.setPolyToPoly(src, 0, dst, 0, 4)
+            
+            val warpedBitmap = android.graphics.Bitmap.createBitmap(a4W.toInt(), a4H.toInt(), android.graphics.Bitmap.Config.ARGB_8888)
+            val canvas = android.graphics.Canvas(warpedBitmap)
+            canvas.concat(matrix)
+            canvas.drawBitmap(bitmap, 0f, 0f, null)
+            
+            return scan(warpedBitmap, numQuestions, numOptions)
+        }
+        
+        private fun findMarkerCenter(bitmap: android.graphics.Bitmap, startX: Int, startY: Int, width: Int, height: Int): android.graphics.PointF {
+            var sumX = 0L
+            var sumY = 0L
+            var count = 0
+            
+            val endX = Math.min(startX + width, bitmap.width)
+            val endY = Math.min(startY + height, bitmap.height)
+            val sX = Math.max(startX, 0)
+            val sY = Math.max(startY, 0)
+            
+            for (y in sY until endY step 2) {
+                for (x in sX until endX step 2) {
+                    val pixel = bitmap.getPixel(x, y)
+                    val r = android.graphics.Color.red(pixel)
+                    val g = android.graphics.Color.green(pixel)
+                    val b = android.graphics.Color.blue(pixel)
+                    val luminance = (0.299 * r + 0.587 * g + 0.114 * b).toInt()
+                    
+                    if (luminance < 100) {
+                        sumX += x
+                        sumY += y
+                        count++
+                    }
+                }
+            }
+            
+            if (count > 10) {
+                return android.graphics.PointF(sumX.toFloat() / count, sumY.toFloat() / count)
+            }
+            
+            // Fallback if no black marker found in region
+            return android.graphics.PointF(sX + width / 2f, sY + height / 2f)
+        }
+"""
+
+if "fun scanAdvanced" not in scan_code:
+    scan_code = scan_code.replace("companion object {", advanced_scan_code)
+    with open("app/src/main/java/com/example/util/OmrScanner.kt", "w") as f:
+        f.write(scan_code)
+
