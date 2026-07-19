@@ -1,4 +1,6 @@
+import re
 
+code = """
 package com.example.util
 
 import android.graphics.Bitmap
@@ -212,7 +214,7 @@ object OmrScanner {
         return nonZero.toDouble() / totalPixels
     }
 
-private fun findCornersOpenCV(gray: Mat): List<Point>? {
+    private fun findCornersOpenCV(gray: Mat): List<Point>? {
         val blurred = Mat()
         Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
         
@@ -227,30 +229,22 @@ private fun findCornersOpenCV(gray: Mat): List<Point>? {
         
         for (contour in contours) {
             val area = Imgproc.contourArea(contour)
-            if (area > 200 && area < gray.width() * gray.height() / 20) { 
-                val rect = Imgproc.boundingRect(contour)
-                val aspectRatio = rect.width.toDouble() / rect.height
+            if (area > 300 && area < gray.width() * gray.height() / 10) { 
+                val contour2f = MatOfPoint2f(*contour.toArray())
+                val peri = Imgproc.arcLength(contour2f, true)
+                val approx = MatOfPoint2f()
+                Imgproc.approxPolyDP(contour2f, approx, 0.04 * peri, true)
                 
-                // Allow slightly more lenient aspect ratio for tilted squares
-                if (aspectRatio > 0.6 && aspectRatio < 1.4) {
-                    // Check if it's mostly black inside
-                    val mask = Mat.zeros(gray.size(), CvType.CV_8U)
-                    Imgproc.drawContours(mask, listOf(contour), -1, Scalar(255.0), -1)
-                    val mean = Core.mean(gray, mask).`val`[0]
-                    if (mean < 120) { 
-                        // To avoid adding both inner and outer contours of the same marker,
-                        // check distance to existing centers
-                        val center = Point(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0)
-                        var isDuplicate = false
-                        for (existing in squareCenters) {
-                            val dist = Math.hypot(existing.x - center.x, existing.y - center.y)
-                            if (dist < 20.0) {
-                                isDuplicate = true
-                                break
-                            }
-                        }
-                        if (!isDuplicate) {
-                            squareCenters.add(center)
+                if (approx.total() == 4L) {
+                    val rect = Imgproc.boundingRect(contour)
+                    val aspectRatio = rect.width.toDouble() / rect.height
+                    
+                    if (aspectRatio > 0.7 && aspectRatio < 1.3) {
+                        val mask = Mat.zeros(gray.size(), CvType.CV_8U)
+                        Imgproc.drawContours(mask, listOf(contour), -1, Scalar(255.0), -1)
+                        val mean = Core.mean(gray, mask).`val`[0]
+                        if (mean < 120) { 
+                            squareCenters.add(Point(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0))
                         }
                     }
                 }
@@ -273,7 +267,6 @@ private fun findCornersOpenCV(gray: Mat): List<Point>? {
                 if (pt.x > w/2 && pt.y > h/2 && ((w - pt.x) + (h - pt.y) < (w - br.x) + (h - br.y))) br = pt
             }
             
-            // Check if they form a reasonable quadrilateral
             if (tl.x < w && tr.x > 0 && bl.x < w && br.x > 0) {
                 return listOf(tl, tr, bl, br)
             }
@@ -309,3 +302,7 @@ private fun findCornersOpenCV(gray: Mat): List<Point>? {
         return null
     }
 }
+"""
+with open("app/src/main/java/com/example/util/OmrScanner.kt", "w") as f:
+    f.write(code)
+
