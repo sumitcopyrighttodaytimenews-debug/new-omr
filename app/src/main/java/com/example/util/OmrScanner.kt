@@ -12,8 +12,6 @@ object OmrScanner {
     fun scan(bitmap: Bitmap, numQuestions: Int, numOptions: Int): ScanResult {
                 val width = bitmap.width
         val height = bitmap.height
-        val pixels = IntArray(width * height)
-        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
         val annotatedBitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
         val canvas = android.graphics.Canvas(annotatedBitmap)
         val paintGreen = android.graphics.Paint().apply { color = Color.GREEN; style = android.graphics.Paint.Style.STROKE; strokeWidth = 4f }
@@ -24,10 +22,10 @@ object OmrScanner {
 
         // Find the 4 corner squares of the OMR sheet
         // Find the 4 corner squares of the OMR sheet
-        val tl = findCorner(pixels, width, height, isLeft = true, isTop = true)
-        val tr = findCorner(pixels, width, height, isLeft = false, isTop = true)
-        val bl = findCorner(pixels, width, height, isLeft = true, isTop = false)
-        val br = findCorner(pixels, width, height, isLeft = false, isTop = false)
+        val tl = findCorner(bitmap, isLeft = true, isTop = true)
+        val tr = findCorner(bitmap, isLeft = false, isTop = true)
+        val bl = findCorner(bitmap, isLeft = true, isTop = false)
+        val br = findCorner(bitmap, isLeft = false, isTop = false)
 
         // Draw corners on annotated bitmap
         canvas.drawCircle(tl.first, tl.second, 20f, paintBlue)
@@ -74,7 +72,7 @@ object OmrScanner {
             val vx = setStartX
             val vy = setStartY + i * setSpacingY
             val actual = mapVirtualToActual(vx, vy)
-            val darkness = sampleDarkness(pixels, width, height, matrix, vx, vy, actual.first, actual.second, 14f)
+            val darkness = sampleDarkness(bitmap, matrix, vx, vy, actual.first, actual.second, 14f)
             
             canvas.drawCircle(actual.first, actual.second, 15f, paintRed)
             
@@ -99,6 +97,11 @@ object OmrScanner {
         // Read Student ID using ZXing
         var studentId = "?"
         try {
+            val width = bitmap.width
+            val height = bitmap.height
+            val pixels = IntArray(width * height)
+            bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+            
             val source = com.google.zxing.RGBLuminanceSource(width, height, pixels)
             val binaryBitmap = com.google.zxing.BinaryBitmap(com.google.zxing.common.HybridBinarizer(source))
             
@@ -112,8 +115,12 @@ object OmrScanner {
             e.printStackTrace()
             // Fallback: try to decode only the top half of the image
             try {
-                val halfPixels = pixels.copyOfRange(0, width * (height / 2))
-                val source = com.google.zxing.RGBLuminanceSource(width, height / 2, halfPixels)
+                val width = bitmap.width
+                val height = bitmap.height / 2
+                val pixels = IntArray(width * height)
+                bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+                
+                val source = com.google.zxing.RGBLuminanceSource(width, height, pixels)
                 val binaryBitmap = com.google.zxing.BinaryBitmap(com.google.zxing.common.HybridBinarizer(source))
                 
                 val hints = java.util.EnumMap<com.google.zxing.DecodeHintType, Any>(com.google.zxing.DecodeHintType::class.java)
@@ -155,7 +162,7 @@ object OmrScanner {
                 val vy = qStartY
                 val actual = mapVirtualToActual(vx, vy)
                 currentOptionCoords.add(actual)
-                val darkness = sampleDarkness(pixels, width, height, matrix, vx, vy, actual.first, actual.second, ansBubbleRadius)
+                val darkness = sampleDarkness(bitmap, matrix, vx, vy, actual.first, actual.second, ansBubbleRadius)
                 
                 if (darkness > maxDarkness) {
                     secondMaxDarkness = maxDarkness
@@ -183,7 +190,7 @@ object OmrScanner {
         return ScanResult(studentId, paperSet, answers, annotatedBitmap, allOptionCoords)
     }
 
-    private fun findCenterOfMass(pixels: IntArray, width: Int, height: Int, startX: Int, startY: Int, endX: Int, endY: Int): Pair<Float, Float>? {
+    private fun findCenterOfMass(bitmap: Bitmap, startX: Int, startY: Int, endX: Int, endY: Int): Pair<Float, Float>? {
         var sumX = 0L
         var sumY = 0L
         var count = 0
@@ -193,7 +200,7 @@ object OmrScanner {
         var bgCount = 0
         for (x in startX until endX step 2) {
             for (y in startY until endY step 2) {
-                val pixel = pixels[y * width + x]
+                val pixel = bitmap.getPixel(x, y)
                 val r = Color.red(pixel)
                 val g = Color.green(pixel)
                 val b = Color.blue(pixel)
@@ -206,7 +213,7 @@ object OmrScanner {
 
         for (x in startX until endX) {
             for (y in startY until endY) {
-                val pixel = pixels[y * width + x]
+                val pixel = bitmap.getPixel(x, y)
                 val r = Color.red(pixel)
                 val g = Color.green(pixel)
                 val b = Color.blue(pixel)
@@ -228,7 +235,7 @@ object OmrScanner {
         }
     }
 
-    private fun sampleDarkness(pixels: IntArray, width: Int, height: Int, matrix: Matrix, virtualX: Float, virtualY: Float, actualX: Float, actualY: Float, virtualRadius: Float): Float {
+    private fun sampleDarkness(bitmap: Bitmap, matrix: Matrix, virtualX: Float, virtualY: Float, actualX: Float, actualY: Float, virtualRadius: Float): Float {
         // Map radius to image coordinates approximately
         val ptsRadius = floatArrayOf(virtualX + virtualRadius, virtualY)
         matrix.mapPoints(ptsRadius)
@@ -240,10 +247,10 @@ object OmrScanner {
         
         val actualRadius = (radius * 0.75f).toInt().coerceAtLeast(2) // Sample inner core avoiding borders
 
-        val cx = actualX.toInt().coerceIn(0, width - 1)
-        val cy = actualY.toInt().coerceIn(0, height - 1)
+        val cx = actualX.toInt().coerceIn(0, bitmap.width - 1)
+        val cy = actualY.toInt().coerceIn(0, bitmap.height - 1)
 
-        if (cx - actualRadius < 0 || cy - actualRadius < 0 || cx + actualRadius >= width || cy + actualRadius >= height) {
+        if (cx - actualRadius < 0 || cy - actualRadius < 0 || cx + actualRadius >= bitmap.width || cy + actualRadius >= bitmap.height) {
             return 0f
         }
 
@@ -258,8 +265,8 @@ object OmrScanner {
         
         val startX = (cx - bgRadius).coerceAtLeast(0)
         val startY = (cy - bgRadius).coerceAtLeast(0)
-        val endX = (cx + bgRadius).coerceAtMost(width - 1)
-        val endY = (cy + bgRadius).coerceAtMost(height - 1)
+        val endX = (cx + bgRadius).coerceAtMost(bitmap.width - 1)
+        val endY = (cy + bgRadius).coerceAtMost(bitmap.height - 1)
 
         for (dx in startX - cx..endX - cx) {
             for (dy in startY - cy..endY - cy) {
@@ -267,8 +274,8 @@ object OmrScanner {
                 if (distSq in (bgMinRadius * bgMinRadius)..bgRadius * bgRadius) {
                     val px = cx + dx
                     val py = cy + dy
-                    if (px in 0 until width && py in 0 until height) {
-                        val pixel = pixels[py * width + px]
+                    if (px in 0 until bitmap.width && py in 0 until bitmap.height) {
+                        val pixel = bitmap.getPixel(px, py)
                         val r = Color.red(pixel)
                         val g = Color.green(pixel)
                         val b = Color.blue(pixel)
@@ -286,9 +293,9 @@ object OmrScanner {
         for (dx in -actualRadius..actualRadius) {
             for (dy in -actualRadius..actualRadius) {
                 if (dx * dx + dy * dy <= actualRadius * actualRadius) {
-                    val px = (cx + dx).coerceIn(0, width - 1)
-                    val py = (cy + dy).coerceIn(0, height - 1)
-                    val pixel = pixels[py * width + px]
+                    val px = (cx + dx).coerceIn(0, bitmap.width - 1)
+                    val py = (cy + dy).coerceIn(0, bitmap.height - 1)
+                    val pixel = bitmap.getPixel(px, py)
                     val r = Color.red(pixel)
                     val g = Color.green(pixel)
                     val b = Color.blue(pixel)
@@ -305,7 +312,9 @@ object OmrScanner {
         return if (totalCount == 0) 0f else darkCount.toFloat() / totalCount
     }
 
-    private fun findCorner(pixels: IntArray, width: Int, height: Int, isLeft: Boolean, isTop: Boolean): Pair<Float, Float> {
+    private fun findCorner(bitmap: Bitmap, isLeft: Boolean, isTop: Boolean): Pair<Float, Float> {
+        val width = bitmap.width
+        val height = bitmap.height
         
         val searchWidth = width / 4
         val searchHeight = height / 4
@@ -320,7 +329,7 @@ object OmrScanner {
         val step = Math.max(1, width / 100)
         for (x in startX until endX step step) {
             for (y in startY until endY step step) {
-                val pixel = pixels[y * width + x]
+                val pixel = bitmap.getPixel(x, y)
                 val r = android.graphics.Color.red(pixel)
                 val g = android.graphics.Color.green(pixel)
                 val b = android.graphics.Color.blue(pixel)
@@ -343,7 +352,7 @@ object OmrScanner {
                 var darkCount = 0
                 for (wx in x until x + windowSize step step) {
                     for (wy in y until y + windowSize step step) {
-                        val pixel = pixels[wy * width + wx]
+                        val pixel = bitmap.getPixel(wx, wy)
                         val r = android.graphics.Color.red(pixel)
                         val g = android.graphics.Color.green(pixel)
                         val b = android.graphics.Color.blue(pixel)
@@ -381,7 +390,7 @@ object OmrScanner {
             var count = 0
             for (wx in (bestX - windowSize).toInt().coerceAtLeast(0) until (bestX + windowSize).toInt().coerceAtMost(width - 1)) {
                 for (wy in (bestY - windowSize).toInt().coerceAtLeast(0) until (bestY + windowSize).toInt().coerceAtMost(height - 1)) {
-                    val pixel = pixels[wy * width + wx]
+                    val pixel = bitmap.getPixel(wx, wy)
                     val r = android.graphics.Color.red(pixel)
                     val g = android.graphics.Color.green(pixel)
                     val b = android.graphics.Color.blue(pixel)
