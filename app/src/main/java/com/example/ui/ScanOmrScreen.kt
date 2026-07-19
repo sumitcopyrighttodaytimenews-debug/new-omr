@@ -22,6 +22,11 @@ import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material3.*
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.*
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.RESULT_FORMAT_JPEG
+import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions.SCANNER_MODE_FULL
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
+import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
@@ -83,18 +88,67 @@ fun ScanOmrScreen(navController: NavController, viewModel: OmrViewModel, examId:
             } else {
 
                 var startLiveScanner by remember { mutableStateOf(false) }
-                if (startLiveScanner) {
-                    LiveScanner(
-                        numQuestions = numQuestions,
-                        numOptions = numOptions,
-                        onScanSuccess = { res ->
-                            scanResult = res
-                            startLiveScanner = false
-                        },
-                        onCancel = {
-                            startLiveScanner = false
+                
+                val scannerOptions = remember {
+                    GmsDocumentScannerOptions.Builder()
+                        .setGalleryImportAllowed(true)
+                        .setPageLimit(1)
+                        .setResultFormats(RESULT_FORMAT_JPEG)
+                        .setScannerMode(SCANNER_MODE_FULL)
+                        .build()
+                }
+                
+                val scanner = remember { GmsDocumentScanning.getClient(scannerOptions) }
+                
+                val scannerLauncher = rememberLauncherForActivityResult(
+                    contract = ActivityResultContracts.StartIntentSenderForResult()
+                ) { activityResult ->
+                    if (activityResult.resultCode == Activity.RESULT_OK) {
+                        val resultData = GmsDocumentScanningResult.fromActivityResultIntent(activityResult.data)
+                        resultData?.pages?.firstOrNull()?.imageUri?.let { uri ->
+                            isProcessing = true
+                            coroutineScope.launch(Dispatchers.Default) {
+                                try {
+                                    val inputStream = context.contentResolver.openInputStream(uri)
+                                    val bitmap = BitmapFactory.decodeStream(inputStream)
+                                    inputStream?.close()
+                                    
+                                    if (bitmap != null) {
+                                        val res = OmrScanner.scan(bitmap, numQuestions, numOptions, "Standard")
+                                        withContext(Dispatchers.Main) {
+                                            scanResult = res
+                                            isProcessing = false
+                                        }
+                                    } else {
+                                        withContext(Dispatchers.Main) {
+                                            Toast.makeText(context, "Failed to decode image", Toast.LENGTH_SHORT).show()
+                                            isProcessing = false
+                                        }
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                                        isProcessing = false
+                                    }
+                                }
+                            }
                         }
-                    )
+                    }
+                }
+
+                if (startLiveScanner) {
+                    // Start ML Kit scanner
+                    LaunchedEffect(Unit) {
+                        scanner.getStartScanIntent(context as Activity)
+                            .addOnSuccessListener { intentSender ->
+                                scannerLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                                startLiveScanner = false
+                            }
+                            .addOnFailureListener { e ->
+                                Toast.makeText(context, "Failed to start scanner: ${e.message}", Toast.LENGTH_SHORT).show()
+                                startLiveScanner = false
+                            }
+                    }
                 } else {
                     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                         Icon(Icons.Default.DocumentScanner, contentDescription = null, modifier = Modifier.size(72.dp), tint = MaterialTheme.colorScheme.primary)

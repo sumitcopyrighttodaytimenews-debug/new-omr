@@ -51,14 +51,12 @@ object OmrScanner {
             br.first, br.second,
             bl.first, bl.second
         )
-        // Destination points (virtual sheet 1000x1414)
-        // The corner squares are drawn at margin 30, with size 40x40.
-        // So their centers are at (50, 50), (950, 50), (950, 1364), (50, 1364)
+        // Destination points based on the 4 markers bounding the answer section
         val dst = floatArrayOf(
-            50f, 50f,
-            950f, 50f,
-            950f, 1364f,
-            50f, 1364f
+            0f, 0f,
+            1000f, 0f,
+            1000f, 1000f,
+            0f, 1000f
         )
         val matrix = Matrix()
         // Map from Virtual Sheet coordinates to Camera Image coordinates
@@ -71,9 +69,9 @@ object OmrScanner {
         }
 
         // Read Set
-        val setStartX = 215f
-        val setStartY = 590f
-        val setSpacingY = 60f
+        val setStartX = 120f
+        val setStartY = 50f
+        val setSpacingY = 94.736f
         val setSets = listOf("A", "B", "C", "D", "E", "F", "G", "H", "I", "J")
         var bestSetRow = -1
         var maxSetDarkness = 0f
@@ -192,11 +190,11 @@ object OmrScanner {
     
 
         // Read Answers
-        val ansBaseX = 316f
-        val ansBaseY = 599.5f
-        val ansColStrideX = 130f
-        val ansSpacingX = 21f
-        val ansSpacingY = 39f
+        val ansBaseX = 230f
+        val ansBaseY = 50f
+        val ansColStrideX = 160f
+        val ansSpacingX = 30f
+        val ansSpacingY = 47.368f
         val ansBubbleRadius = 10f
         val questionsPerColumn = 20
 
