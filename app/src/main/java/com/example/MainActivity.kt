@@ -31,11 +31,17 @@ import com.example.ui.theme.MyApplicationTheme
 
 
 import android.util.Log
+import org.opencv.android.OpenCVLoader
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+                if (!OpenCVLoader.initDebug()) {
+            Log.e("OpenCV", "Unable to load OpenCV!")
+        } else {
+            Log.d("OpenCV", "OpenCV loaded Successfully!")
+        }
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
