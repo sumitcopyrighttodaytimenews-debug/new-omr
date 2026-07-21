@@ -92,6 +92,38 @@ object OmrScanner {
         
         // 5. Bubble Mapping & Fill Detection
         
+        
+        // --- BUBBLE SNAPPING ---
+        val bubbleCenters = mutableListOf<Point>()
+        val contours = ArrayList<MatOfPoint>()
+        val hierarchy = Mat()
+        Imgproc.findContours(warpedThresh, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
+        
+        for (contour in contours) {
+            val area = Imgproc.contourArea(contour)
+            val rect = Imgproc.boundingRect(contour)
+            val aspectRatio = rect.width.toDouble() / rect.height
+            if (area > 50 && area < 1500 && aspectRatio > 0.6 && aspectRatio < 1.6) {
+                 val cx = rect.x + rect.width / 2.0
+                 val cy = rect.y + rect.height / 2.0
+                 bubbleCenters.add(Point(cx, cy))
+            }
+        }
+
+        fun snapToNearest(cx: Double, cy: Double, centers: List<Point>, maxDist: Double): Point {
+            var bestPt = Point(cx, cy)
+            var minDist = maxDist
+            for (pt in centers) {
+                val dist = Math.hypot(pt.x - cx, pt.y - cy)
+                if (dist < minDist) {
+                    minDist = dist
+                    bestPt = pt
+                }
+            }
+            return bestPt
+        }
+        // ------------------------
+
         // Read Set
         val setStartX = 120.0
         val setStartY = 50.0
@@ -105,8 +137,13 @@ object OmrScanner {
         val bubbleRadius = 14.0
         
         for (i in setSets.indices) {
-            val cx = setStartX
-            val cy = setStartY + i * setSpacingY
+            var cx = setStartX
+            var cy = setStartY + i * setSpacingY
+            
+            val snapped = snapToNearest(cx, cy, bubbleCenters, 14.0)
+            cx = snapped.x
+            cy = snapped.y
+
             
             val fillPercentage = getFillPercentage(warpedThresh, cx, cy, bubbleRadius)
             
@@ -132,7 +169,9 @@ object OmrScanner {
             } else {
                 val cx = setStartX
                 val cy = setStartY + bestSetRow * setSpacingY
-                Imgproc.circle(warpedAnnotated, Point(cx, cy), bubbleRadius.toInt(), colorGreen, -1)
+                val snapped = snapToNearest(cx, cy, bubbleCenters, 14.0)
+                Imgproc.circle(warpedAnnotated, snapped, bubbleRadius.toInt(), colorGreen, -1)
+                // Imgproc.circle(warpedAnnotated, Point(cx, cy), bubbleRadius.toInt(), colorGreen, -1)
                 setSets[bestSetRow]
             }
         } else {
@@ -170,8 +209,12 @@ object OmrScanner {
             val currentOptionCoords = mutableListOf<Pair<Float, Float>>()
             
             for (opt in 0 until numOptions) {
-                val cx = qStartX + opt * ansSpacingX
-                val cy = qStartY
+                var cx = qStartX + opt * ansSpacingX
+                var cy = qStartY
+                
+                val snapped = snapToNearest(cx, cy, bubbleCenters, 14.0)
+                cx = snapped.x
+                cy = snapped.y
                 
                 // Store mapped coordinates for UI overlay
                 currentOptionCoords.add(Pair(cx.toFloat(), cy.toFloat()))
@@ -204,12 +247,16 @@ object OmrScanner {
             if (studentAns >= 0) {
                 val cx = qStartX + studentAns * ansSpacingX
                 val cy = qStartY
-                Imgproc.circle(warpedAnnotated, Point(cx, cy), ansBubbleRadius.toInt(), colorRed, -1)
+                val snapped = snapToNearest(cx, cy, bubbleCenters, 14.0)
+                Imgproc.circle(warpedAnnotated, snapped, ansBubbleRadius.toInt(), colorRed, -1)
+                // Imgproc.circle(warpedAnnotated, Point(cx, cy), ansBubbleRadius.toInt(), colorRed, -1)
             } else if (studentAns == -2) {
                 // Draw yellow circle for multiple marked
                 val cx = qStartX + bestOpt * ansSpacingX
                 val cy = qStartY
-                Imgproc.circle(warpedAnnotated, Point(cx, cy), ansBubbleRadius.toInt(), Scalar(255.0, 255.0, 0.0, 255.0), 2)
+                val snapped = snapToNearest(cx, cy, bubbleCenters, 14.0)
+                Imgproc.circle(warpedAnnotated, snapped, ansBubbleRadius.toInt(), Scalar(255.0, 255.0, 0.0, 255.0), 2)
+                // Imgproc.circle(warpedAnnotated, Point(cx, cy), ansBubbleRadius.toInt(), Scalar(255.0, 255.0, 0.0, 255.0), 2)
             }
             
             answers.add(studentAns)
