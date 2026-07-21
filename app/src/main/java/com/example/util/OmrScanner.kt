@@ -67,6 +67,12 @@ object OmrScanner {
         val warped = Mat()
         Imgproc.warpPerspective(mat, warped, perspectiveTransform, Size(w, h))
         
+        // Draw the srcPoints on the original mat for debugging if they were found
+        val colorCorner = Scalar(255.0, 0.0, 255.0, 255.0) // Magenta
+        for (pt in srcPoints) {
+            Imgproc.circle(mat, pt, 20, colorCorner, -1)
+        }
+        
         val warpedGray = Mat()
         Imgproc.warpPerspective(gray, warpedGray, perspectiveTransform, Size(w, h))
         
@@ -144,7 +150,7 @@ object OmrScanner {
         val ansColStrideX = 160.0
         val ansSpacingX = 30.0
         val ansSpacingY = 47.368
-        val ansBubbleRadius = 11.0
+        val ansBubbleRadius = 14.0
         
         val questionsPerColumn = 20
         val answers = mutableListOf<Int>()
@@ -217,7 +223,7 @@ object OmrScanner {
     }
 
     private fun getFillPercentage(threshInv: Mat, cx: Double, cy: Double, radius: Double): Double {
-        val r = (radius * 0.8).toInt() // Slightly smaller ROI to avoid bubble border
+        val r = (radius * 0.5).toInt() // Much smaller ROI to strictly check the center core only
         
         val x = (cx - r).toInt().coerceAtLeast(0)
         val y = (cy - r).toInt().coerceAtLeast(0)
@@ -233,49 +239,103 @@ object OmrScanner {
         return nonZero.toDouble() / totalPixels
     }
 
-private fun findMarkerInRegion(gray: Mat, xStart: Int, xEnd: Int, yStart: Int, yEnd: Int): Point? {
-        val windowSize = (gray.width() * 0.022).toInt() // ~2.2% of width
-        val step = Math.max(1, windowSize / 4)
+private fun findCornersOpenCV(gray: Mat): List<Point>? {
+        val blurred = Mat()
+        Imgproc.GaussianBlur(gray, blurred, Size(7.0, 7.0), 0.0)
         
-        var minMean = 255.0
-        var bestCx = -1
-        var bestCy = -1
+        val thresh = Mat()
+        Imgproc.adaptiveThreshold(blurred, thresh, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY_INV, 51, 10.0)
         
-        for (y in yStart until (yEnd - windowSize) step step) {
-            for (x in xStart until (xEnd - windowSize) step step) {
-                val roi = gray.submat(Rect(x, y, windowSize, windowSize))
-                val mean = Core.mean(roi).`val`[0]
-                if (mean < minMean) {
-                    minMean = mean
-                    bestCx = x + windowSize / 2
-                    bestCy = y + windowSize / 2
+        val contours = ArrayList<MatOfPoint>()
+        val hierarchy = Mat()
+        Imgproc.findContours(thresh, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE)
+        
+        val squareCenters = mutableListOf<Point>()
+        
+        for (contour in contours) {
+            val area = Imgproc.contourArea(contour)
+            if (area > 150 && area < 10000) {
+                val rect = Imgproc.boundingRect(contour)
+                val aspectRatio = rect.width.toDouble() / rect.height
+                val extent = area / (rect.width * rect.height)
+                
+                if (aspectRatio > 0.6 && aspectRatio < 1.4 && extent > 0.5) {
+                    val center = Point(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0)
+                    
+                    val mask = Mat.zeros(gray.size(), CvType.CV_8U)
+                    Imgproc.drawContours(mask, listOf(contour), -1, Scalar(255.0), -1)
+                    val mean = Core.mean(gray, mask).`val`[0]
+                    if (mean < 130) {
+                        squareCenters.add(center)
+                    }
                 }
             }
         }
         
-        if (minMean < 120) {
-            return Point(bestCx.toDouble(), bestCy.toDouble())
+        if (squareCenters.size >= 4) {
+            val w = gray.width().toDouble()
+            val h = gray.height().toDouble()
+            
+            var tl = squareCenters[0]
+            var tr = squareCenters[0]
+            var bl = squareCenters[0]
+            var br = squareCenters[0]
+            
+            var minTl = Double.MAX_VALUE
+            var minTr = Double.MAX_VALUE
+            var minBl = Double.MAX_VALUE
+            var minBr = Double.MAX_VALUE
+            
+            for (pt in squareCenters) {
+                val valTl = pt.x + pt.y
+                val valTr = (w - pt.x) + pt.y
+                val valBl = pt.x + (h - pt.y)
+                val valBr = (w - pt.x) + (h - pt.y)
+                
+                if (valTl < minTl) { minTl = valTl; tl = pt }
+                if (valTr < minTr) { minTr = valTr; tr = pt }
+                if (valBl < minBl) { minBl = valBl; bl = pt }
+                if (valBr < minBr) { minBr = valBr; br = pt }
+            }
+            
+            val areaQuad = 0.5 * Math.abs(
+                tl.x*tr.y - tl.y*tr.x + 
+                tr.x*br.y - tr.y*br.x + 
+                br.x*bl.y - br.y*bl.x + 
+                bl.x*tl.y - bl.y*tl.x
+            )
+            
+            if (areaQuad > w * h * 0.1) {
+                return listOf(tl, tr, bl, br)
+            }
         }
-        return null
-    }
-
-    private fun findCornersOpenCV(gray: Mat): List<Point>? {
-        val w = gray.width()
-        val h = gray.height()
         
-        // Expected regions for the 4 markers
-        // TL: Left 1-12%, Top 28-42%
-        val tl = findMarkerInRegion(gray, (w * 0.01).toInt(), (w * 0.12).toInt(), (h * 0.28).toInt(), (h * 0.42).toInt())
-        // TR: Right 88-99%, Top 28-42%
-        val tr = findMarkerInRegion(gray, (w * 0.88).toInt(), (w * 0.99).toInt(), (h * 0.28).toInt(), (h * 0.42).toInt())
-        // BL: Left 1-12%, Bottom 85-98%
-        val bl = findMarkerInRegion(gray, (w * 0.01).toInt(), (w * 0.12).toInt(), (h * 0.85).toInt(), (h * 0.98).toInt())
-        // BR: Right 88-99%, Bottom 85-98%
-        val br = findMarkerInRegion(gray, (w * 0.88).toInt(), (w * 0.99).toInt(), (h * 0.85).toInt(), (h * 0.98).toInt())
+        var maxAreaContour = 0.0
+        var bestApprox = MatOfPoint2f()
         
-        if (tl != null && tr != null && bl != null && br != null) {
-            return listOf(tl, tr, bl, br)
+        for (contour in contours) {
+            val area = Imgproc.contourArea(contour)
+            if (area > gray.width() * gray.height() * 0.1) {
+                val contour2f = MatOfPoint2f(*contour.toArray())
+                val peri = Imgproc.arcLength(contour2f, true)
+                val approx = MatOfPoint2f()
+                Imgproc.approxPolyDP(contour2f, approx, 0.02 * peri, true)
+                
+                if (approx.total() == 4L && area > maxAreaContour) {
+                    maxAreaContour = area
+                    approx.copyTo(bestApprox)
+                }
+            }
         }
+        
+        if (bestApprox.total() == 4L) {
+             val points = bestApprox.toList()
+             val sortedByY = points.sortedBy { it.y }
+             val top = sortedByY.take(2).sortedBy { it.x }
+             val bottom = sortedByY.drop(2).sortedBy { it.x }
+             return listOf(top[0], top[1], bottom[0], bottom[1])
+        }
+        
         return null
     }
 }
