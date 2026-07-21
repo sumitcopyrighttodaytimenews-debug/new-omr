@@ -43,12 +43,13 @@ object OmrScanner {
         val srcPoints = if (corners != null) {
             corners
         } else {
-            // Absolute fallback
+            // Absolute fallback: Assume image is perfectly cropped A4 page, 
+            // guess the marker positions based on expected layout percentages.
             listOf(
-                Point(0.0, 0.0),
-                Point(bitmap.width.toDouble(), 0.0),
-                Point(0.0, bitmap.height.toDouble()),
-                Point(bitmap.width.toDouble(), bitmap.height.toDouble())
+                Point(bitmap.width * 0.05, bitmap.height * 0.35),
+                Point(bitmap.width * 0.95, bitmap.height * 0.35),
+                Point(bitmap.width * 0.05, bitmap.height * 0.96),
+                Point(bitmap.width * 0.95, bitmap.height * 0.96)
             )
         }
 
@@ -70,9 +71,12 @@ object OmrScanner {
         Imgproc.warpPerspective(gray, warpedGray, perspectiveTransform, Size(w, h))
         
         // Apply Thresholding on warped image for bubble detection
+        val warpedBlurred = Mat()
+        Imgproc.GaussianBlur(warpedGray, warpedBlurred, Size(5.0, 5.0), 0.0)
+        
         val warpedThresh = Mat()
         // Adaptive thresholding to handle uneven lighting
-        Imgproc.adaptiveThreshold(warpedGray, warpedThresh, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY_INV, 31, 15.0)
+        Imgproc.adaptiveThreshold(warpedBlurred, warpedThresh, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY_INV, 31, 15.0)
 
         // Draw debug overlay on warped image
         val warpedAnnotated = warped.clone()
@@ -116,13 +120,17 @@ object OmrScanner {
         val fillThreshold = 0.35 // 35% of pixels in the ROI are dark
         val marginThreshold = 0.15 // Difference between top and second top
         
-        val paperSet = if (maxSetDarkness > fillThreshold && (maxSetDarkness - secondMaxSetDarkness) > marginThreshold && bestSetRow != -1) {
-            val cx = setStartX
-            val cy = setStartY + bestSetRow * setSpacingY
-            Imgproc.circle(warpedAnnotated, Point(cx, cy), bubbleRadius.toInt(), colorGreen, -1)
-            setSets[bestSetRow] 
+        val paperSet = if (maxSetDarkness > fillThreshold) {
+            if (secondMaxSetDarkness > fillThreshold || (maxSetDarkness - secondMaxSetDarkness) < marginThreshold) {
+                "MULTIPLE"
+            } else {
+                val cx = setStartX
+                val cy = setStartY + bestSetRow * setSpacingY
+                Imgproc.circle(warpedAnnotated, Point(cx, cy), bubbleRadius.toInt(), colorGreen, -1)
+                setSets[bestSetRow]
+            }
         } else {
-            "?" // MULTIPLE_MARKED or NOT_ATTEMPTED
+            "BLANK"
         }
         
         // Student ID (Assuming it's filled in bubbles or we can just return a placeholder for now since we focused on SET and Answers)
@@ -177,12 +185,25 @@ object OmrScanner {
             
             allOptionCoords.add(currentOptionCoords)
             
-            val studentAns = if (maxDarkness > fillThreshold && (maxDarkness - secondMaxDarkness) > marginThreshold && bestOpt != -1) bestOpt else -1
+            var studentAns = -1 // NOT_ATTEMPTED
             
-            if (studentAns != -1) {
+            if (maxDarkness > fillThreshold) {
+                if (secondMaxDarkness > fillThreshold || (maxDarkness - secondMaxDarkness) < marginThreshold) {
+                    studentAns = -2 // MULTIPLE_MARKED
+                } else {
+                    studentAns = bestOpt
+                }
+            }
+            
+            if (studentAns >= 0) {
                 val cx = qStartX + studentAns * ansSpacingX
                 val cy = qStartY
                 Imgproc.circle(warpedAnnotated, Point(cx, cy), ansBubbleRadius.toInt(), colorRed, -1)
+            } else if (studentAns == -2) {
+                // Draw yellow circle for multiple marked
+                val cx = qStartX + bestOpt * ansSpacingX
+                val cy = qStartY
+                Imgproc.circle(warpedAnnotated, Point(cx, cy), ansBubbleRadius.toInt(), Scalar(255.0, 255.0, 0.0, 255.0), 2)
             }
             
             answers.add(studentAns)
@@ -212,100 +233,49 @@ object OmrScanner {
         return nonZero.toDouble() / totalPixels
     }
 
-private fun findCornersOpenCV(gray: Mat): List<Point>? {
-        val blurred = Mat()
-        Imgproc.GaussianBlur(gray, blurred, Size(5.0, 5.0), 0.0)
+private fun findMarkerInRegion(gray: Mat, xStart: Int, xEnd: Int, yStart: Int, yEnd: Int): Point? {
+        val windowSize = (gray.width() * 0.022).toInt() // ~2.2% of width
+        val step = Math.max(1, windowSize / 4)
         
-        val thresh = Mat()
-        Imgproc.adaptiveThreshold(blurred, thresh, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY_INV, 25, 10.0)
+        var minMean = 255.0
+        var bestCx = -1
+        var bestCy = -1
         
-        val contours = ArrayList<MatOfPoint>()
-        val hierarchy = Mat()
-        Imgproc.findContours(thresh, contours, hierarchy, Imgproc.RETR_TREE, Imgproc.CHAIN_APPROX_SIMPLE)
-        
-        val squareCenters = mutableListOf<Point>()
-        
-        for (contour in contours) {
-            val area = Imgproc.contourArea(contour)
-            if (area > 200 && area < gray.width() * gray.height() / 20) { 
-                val rect = Imgproc.boundingRect(contour)
-                val aspectRatio = rect.width.toDouble() / rect.height
-                
-                // Allow slightly more lenient aspect ratio for tilted squares
-                if (aspectRatio > 0.6 && aspectRatio < 1.4) {
-                    // Check if it's mostly black inside
-                    val mask = Mat.zeros(gray.size(), CvType.CV_8U)
-                    Imgproc.drawContours(mask, listOf(contour), -1, Scalar(255.0), -1)
-                    val mean = Core.mean(gray, mask).`val`[0]
-                    if (mean < 120) { 
-                        // To avoid adding both inner and outer contours of the same marker,
-                        // check distance to existing centers
-                        val center = Point(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0)
-                        var isDuplicate = false
-                        for (existing in squareCenters) {
-                            val dist = Math.hypot(existing.x - center.x, existing.y - center.y)
-                            if (dist < 20.0) {
-                                isDuplicate = true
-                                break
-                            }
-                        }
-                        if (!isDuplicate) {
-                            squareCenters.add(center)
-                        }
-                    }
+        for (y in yStart until (yEnd - windowSize) step step) {
+            for (x in xStart until (xEnd - windowSize) step step) {
+                val roi = gray.submat(Rect(x, y, windowSize, windowSize))
+                val mean = Core.mean(roi).`val`[0]
+                if (mean < minMean) {
+                    minMean = mean
+                    bestCx = x + windowSize / 2
+                    bestCy = y + windowSize / 2
                 }
             }
         }
         
-        if (squareCenters.size >= 4) {
-            val w = gray.width().toDouble()
-            val h = gray.height().toDouble()
-            
-            var tl = Point(w, h)
-            var tr = Point(0.0, h)
-            var bl = Point(w, 0.0)
-            var br = Point(0.0, 0.0)
-            
-            for (pt in squareCenters) {
-                if (pt.x < w/2 && pt.y < h/2 && (pt.x + pt.y < tl.x + tl.y)) tl = pt
-                if (pt.x > w/2 && pt.y < h/2 && ((w - pt.x) + pt.y < (w - tr.x) + tr.y)) tr = pt
-                if (pt.x < w/2 && pt.y > h/2 && (pt.x + (h - pt.y) < bl.x + (h - bl.y))) bl = pt
-                if (pt.x > w/2 && pt.y > h/2 && ((w - pt.x) + (h - pt.y) < (w - br.x) + (h - br.y))) br = pt
-            }
-            
-            // Check if they form a reasonable quadrilateral
-            if (tl.x < w && tr.x > 0 && bl.x < w && br.x > 0) {
-                return listOf(tl, tr, bl, br)
-            }
+        if (minMean < 120) {
+            return Point(bestCx.toDouble(), bestCy.toDouble())
         }
+        return null
+    }
+
+    private fun findCornersOpenCV(gray: Mat): List<Point>? {
+        val w = gray.width()
+        val h = gray.height()
         
-        // Fallback: Use OpenCV to find the largest document contour
-        var maxArea = 0.0
-        var bestApprox = MatOfPoint2f()
+        // Expected regions for the 4 markers
+        // TL: Left 1-12%, Top 28-42%
+        val tl = findMarkerInRegion(gray, (w * 0.01).toInt(), (w * 0.12).toInt(), (h * 0.28).toInt(), (h * 0.42).toInt())
+        // TR: Right 88-99%, Top 28-42%
+        val tr = findMarkerInRegion(gray, (w * 0.88).toInt(), (w * 0.99).toInt(), (h * 0.28).toInt(), (h * 0.42).toInt())
+        // BL: Left 1-12%, Bottom 85-98%
+        val bl = findMarkerInRegion(gray, (w * 0.01).toInt(), (w * 0.12).toInt(), (h * 0.85).toInt(), (h * 0.98).toInt())
+        // BR: Right 88-99%, Bottom 85-98%
+        val br = findMarkerInRegion(gray, (w * 0.88).toInt(), (w * 0.99).toInt(), (h * 0.85).toInt(), (h * 0.98).toInt())
         
-        for (contour in contours) {
-            val area = Imgproc.contourArea(contour)
-            if (area > 10000) { 
-                val contour2f = MatOfPoint2f(*contour.toArray())
-                val peri = Imgproc.arcLength(contour2f, true)
-                val approx = MatOfPoint2f()
-                Imgproc.approxPolyDP(contour2f, approx, 0.02 * peri, true)
-                
-                if (approx.total() == 4L && area > maxArea) {
-                    maxArea = area
-                    approx.copyTo(bestApprox)
-                }
-            }
+        if (tl != null && tr != null && bl != null && br != null) {
+            return listOf(tl, tr, bl, br)
         }
-        
-        if (bestApprox.total() == 4L) {
-             val points = bestApprox.toList()
-             val sortedByY = points.sortedBy { it.y }
-             val top = sortedByY.take(2).sortedBy { it.x }
-             val bottom = sortedByY.drop(2).sortedBy { it.x }
-             return listOf(top[0], top[1], bottom[0], bottom[1])
-        }
-        
         return null
     }
 }

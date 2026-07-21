@@ -1,34 +1,37 @@
 import re
 
 with open("app/src/main/java/com/example/ui/ScanOmrScreen.kt", "r") as f:
-    content = f.read()
+    text = f.read()
 
-target = """        // Show grid of questions
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {"""
+old_ui = """
+                                        Text(
+                                            text = "Q${index + 1}: ${if (ans == -1) "-" else ('A' + ans)}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier = Modifier.padding(4.dp),
+                                            color = if (ans == -1) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                                        )
+"""
 
-replacement = """        // Show Annotated Image
-        val imageBitmap = remember(scanResult) { scanResult?.annotatedBitmap?.asImageBitmap() }
-        if (imageBitmap != null) {
-            Text("Scanned Sheet", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            androidx.compose.foundation.Image(
-                bitmap = imageBitmap,
-                contentDescription = "Annotated OMR",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
-                    .aspectRatio(imageBitmap.width.toFloat() / imageBitmap.height.toFloat())
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-        }
+new_ui = """
+                                        val ansText = when (ans) {
+                                            -1 -> "BLANK"
+                                            -2 -> "MULTIPLE"
+                                            else -> ('A' + ans).toString()
+                                        }
+                                        val ansColor = when (ans) {
+                                            -1 -> MaterialTheme.colorScheme.error
+                                            -2 -> MaterialTheme.colorScheme.error
+                                            else -> MaterialTheme.colorScheme.onSurface
+                                        }
+                                        Text(
+                                            text = "Q${index + 1}: $ansText",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            modifier = Modifier.padding(4.dp),
+                                            color = ansColor
+                                        )
+"""
 
-        // Show grid of questions
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {"""
+text = text.replace(old_ui.strip(), new_ui.strip())
+with open("app/src/main/java/com/example/ui/ScanOmrScreen.kt", "w") as f:
+    f.write(text)
 
-if target in content:
-    content = content.replace(target, replacement)
-    with open("app/src/main/java/com/example/ui/ScanOmrScreen.kt", "w") as f:
-        f.write(content)
-    print("Updated ScanOmrScreen.kt UI")
-else:
-    print("Target not found")

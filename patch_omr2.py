@@ -3,7 +3,7 @@ import re
 with open("app/src/main/java/com/example/util/OmrScanner.kt", "r") as f:
     text = f.read()
 
-new_find_corners = """
+new_code = """
     private fun findMarkerInRegion(gray: Mat, xStart: Int, xEnd: Int, yStart: Int, yEnd: Int): Point? {
         val windowSize = (gray.width() * 0.022).toInt() // ~2.2% of width
         val step = Math.max(1, windowSize / 4)
@@ -49,19 +49,18 @@ new_find_corners = """
         }
         return null
     }
+}
 """
 
 start_str = "    private fun findCornersOpenCV(gray: Mat): List<Point>? {"
-end_str = "return null\n    }"
 
 start_idx = text.find(start_str)
-end_idx = text.rfind(end_str) + len(end_str)
 
-if start_idx != -1 and text.find(end_str) != -1:
-    text = text[:start_idx] + new_find_corners.strip() + text[end_idx:]
+if start_idx != -1:
+    text = text[:start_idx] + new_code.strip() + "\n"
     with open("app/src/main/java/com/example/util/OmrScanner.kt", "w") as f:
         f.write(text)
     print("Patched successfully")
 else:
-    print("Could not find start or end strings")
+    print("Could not find start string")
 
